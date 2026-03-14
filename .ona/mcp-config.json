@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "snyk": {
+      "name": "snyk",
+      "command": "npx",
+      "args": [
+        "-y",
+        "snyk@latest",
+        "mcp",
+        "-t",
+        "stdio",
+        "--disable-trust"
+      ],
+      "env": {
+        "SNYK_TOKEN": "${exec:printenv SNYK_TOKEN}"
+      },
+      "timeout": 30
+    }
+  }
+}
