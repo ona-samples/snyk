@@ -14,6 +14,11 @@ action:
   steps:
     - task:
         command: |
+          command -v snyk && exit 0
+          sudo curl -sL https://static.snyk.io/cli/latest/snyk-linux -o /usr/local/bin/snyk
+          sudo chmod +x /usr/local/bin/snyk
+    - task:
+        command: |
           set -euo pipefail
 
           if [ -z "${SNYK_TOKEN:-}" ]; then
