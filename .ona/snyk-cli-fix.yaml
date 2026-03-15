@@ -1,0 +1,96 @@
+name: snyk-cli-fix
+description: >-
+  Scans for vulnerabilities via the Snyk CLI (snyk test, snyk code test,
+  snyk iac test), fixes the highest-severity issue, verifies the fix,
+  and opens a pull request.
+triggers:
+  - context:
+      projects: {}
+    manual: {}
+action:
+  limits:
+    maxParallel: 1
+    maxTotal: 10
+  steps:
+    - task:
+        command: |
+          set -euo pipefail
+
+          if [ -z "${SNYK_TOKEN:-}" ]; then
+            echo "ERROR: SNYK_TOKEN is not set."
+            exit 1
+          fi
+
+          RESULTS_DIR=/tmp/snyk-cli-results
+          mkdir -p "$RESULTS_DIR"
+
+          echo "=== Running Snyk SCA scan ==="
+          snyk test --json > "$RESULTS_DIR/sca.json" 2>&1 || true
+
+          echo "=== Running Snyk Code scan ==="
+          snyk code test --json > "$RESULTS_DIR/code.json" 2>&1 || true
+
+          echo "=== Running Snyk IaC scan ==="
+          snyk iac test --json > "$RESULTS_DIR/iac.json" 2>&1 || true
+
+          echo "Scan results written to $RESULTS_DIR"
+          for f in "$RESULTS_DIR"/*.json; do
+            echo "  $(basename "$f"): $(wc -c < "$f") bytes"
+          done
+
+    - agent:
+        prompt: |
+          Read the Snyk CLI scan results from /tmp/snyk-cli-results/:
+            - sca.json  (snyk test --json output)
+            - code.json (snyk code test --json output)
+            - iac.json  (snyk iac test --json output)
+
+          From the combined results, select the single highest-severity
+          issue (critical > high > medium > low; prefer SCA > code > IaC
+          when severities are equal).
+
+          If no issues are found, output "NO_VULN" and stop.
+
+          Fix the issue:
+
+          SCA: upgrade the dependency to the minimum fixed version in
+          pom.xml or build.gradle. For transitive deps, upgrade the direct
+          dependency that pulls it in. If no fix version exists, output
+          "NO_FIX: <id>" and stop.
+
+          Code: read the affected source file and apply the secure coding
+          pattern recommended by the scan.
+
+          IaC: read the affected config file and apply the secure setting.
+
+          Do NOT commit or run tests.
+
+    - agent:
+        prompt: |
+          Verify the fix:
+          1. Compile the project. Fix any compilation errors and retry.
+          2. Run all relevant tests.
+          3. If a failure is caused by the fix, correct it and rerun.
+             Ignore pre-existing failures.
+
+    - pullRequest:
+        branch: snyk-fix/
+        title: 'Snyk-Fix: '
+        description: |
+          ## Snyk Vulnerability
+
+          | Field | Value |
+          |-------|-------|
+          | **Scan Type** | `<scan-type>` |
+          | **Vulnerability** | `<vuln-id>` |
+          | **Severity** | <severity> |
+          | **File** | `<file-path>` |
+          | **Title** | <vuln-title> |
+
+          ## What changed
+
+          <one-or-two-sentence explanation>
+
+          ## Verification
+
+          <commands run and their outcomes>

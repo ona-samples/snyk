@@ -1,0 +1,74 @@
+name: snyk-mcp-fix
+description: >-
+  Scans for vulnerabilities via the Snyk MCP tools (snyk_code_scan,
+  snyk_sca_scan, snyk_iac_scan), fixes the highest-severity issue,
+  verifies the fix, and opens a pull request.
+triggers:
+  - context:
+      projects: {}
+    manual: {}
+action:
+  limits:
+    maxParallel: 1
+    maxTotal: 10
+  steps:
+    - agent:
+        prompt: |
+          Run these three Snyk MCP scans against the repository root:
+            a) snyk_code_scan  (SAST)
+            b) snyk_sca_scan   (open-source dependencies)
+            c) snyk_iac_scan   (infrastructure-as-code)
+
+          If a scan fails, note the error and continue with the rest.
+
+          From the combined results, select the single highest-severity
+          issue (critical > high > medium > low; prefer SCA > code > IaC
+          when severities are equal).
+
+          If no issues are found, output "NO_VULN" and stop.
+
+    - agent:
+        prompt: |
+          Fix the highest-severity issue identified in the previous step:
+
+          SCA: upgrade the dependency to the minimum fixed version in
+          pom.xml or build.gradle. For transitive deps, upgrade the direct
+          dependency that pulls it in. If no fix version exists, output
+          "NO_FIX: <id>" and stop.
+
+          Code: read the affected source file and apply the secure coding
+          pattern recommended by the scan.
+
+          IaC: read the affected config file and apply the secure setting.
+
+          Do NOT commit or run tests.
+
+    - agent:
+        prompt: |
+          Verify the fix:
+          1. Compile the project. Fix any compilation errors and retry.
+          2. Run all relevant tests.
+          3. If a failure is caused by the fix, correct it and rerun.
+             Ignore pre-existing failures.
+
+    - pullRequest:
+        branch: snyk-fix/
+        title: 'Snyk-Fix: '
+        description: |
+          ## Snyk Vulnerability
+
+          | Field | Value |
+          |-------|-------|
+          | **Scan Type** | `<scan-type>` |
+          | **Vulnerability** | `<vuln-id>` |
+          | **Severity** | <severity> |
+          | **File** | `<file-path>` |
+          | **Title** | <vuln-title> |
+
+          ## What changed
+
+          <one-or-two-sentence explanation>
+
+          ## Verification
+
+          <commands run and their outcomes>
